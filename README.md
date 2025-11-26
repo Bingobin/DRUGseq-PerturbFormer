@@ -15,45 +15,45 @@ English overview of the DRUG-seq multi-task Transformer pipeline for T cell acti
 ## Key Formulas
 - **Z-score normalization (optional)** for input genes:
 
-  $$
-  x_{i,g}^{(z)} = \frac{x_{i,g} - \mu_g}{\sigma_g + 10^{-8}}
-  $$
+$$
+x_{i,g}^{(z)} = \frac{x_{i,g} - \mu_g}{\sigma_g + 10^{-8}}
+$$
 
-  where $\mu_g, \sigma_g$ are computed on the training split.
+where $\mu_g, \sigma_g$ are computed on the training split.
 
 - **Multi-task loss** (per batch) combining regression, classification, and optional activation regularization:
 
-  $$
-  \mathcal{L} = \text{MSE}(y^{(3)}, \hat{y}^{(3)}) + \text{BCEWithLogits}(y^{(\text{cls})}, \hat{y}^{(\text{cls})}) + \lambda_{\text{reg}} \,\text{MSE}(y^{(\text{act-old})}, \hat{y}^{(\text{act})})
-  $$
+$$
+\mathcal{L} = \text{MSE}(y^{(3)}, \hat{y}^{(3)}) + \text{BCEWithLogits}(y^{(\text{cls})}, \hat{y}^{(\text{cls})}) + \lambda_{\text{reg}} \,\text{MSE}(y^{(\text{act-old})}, \hat{y}^{(\text{act})})
+$$
 
-  with $\lambda_{\text{reg}} = 0.2$ when historical activation scores exist.
+with $\lambda_{\text{reg}} = 0.2$ when historical activation scores exist.
 
 - **Latent norm score** per sample:
 
-  $$
-  s_{\text{latent}} = \lVert z \rVert_2
-  $$
+$$
+s_{\text{latent}} = \lVert z \rVert_2
+$$
 
-  Aggregated by metabolite (mean/std/count) for ranking.
+Aggregated by metabolite (mean/std/count) for ranking.
 
 - **Latent distance to DMSO center**:
 
-  $$
-  \mu_{\text{DMSO}} = \frac{1}{N_{\text{DMSO}}} \sum_{i \in \text{DMSO}} z_i
-  $$
+$$
+\mu_{\text{DMSO}} = \frac{1}{N_{\text{DMSO}}} \sum_{i \in \text{DMSO}} z_i
+$$
 
-  $$
-  d_{\text{euclid}}(i)=\lVert z_i - \mu_{\text{DMSO}}\rVert_2, \qquad d_{\text{cos}}(i)=1-\frac{z_i \cdot \mu_{\text{DMSO}}}{\lVert z_i\rVert_2\,\lVert \mu_{\text{DMSO}}\rVert_2}
-  $$
+$$
+d_{\text{euclid}}(i)=\lVert z_i - \mu_{\text{DMSO}}\rVert_2, \qquad d_{\text{cos}}(i)=1-\frac{z_i \cdot \mu_{\text{DMSO}}}{\lVert z_i\rVert_2\,\lVert \mu_{\text{DMSO}}\rVert_2}
+$$
 
 - **Gradient×Input gene importance** (global average over samples):
 
-  $$
-  \text{GI}_g = \frac{1}{N} \sum_{i=1}^{N} \left| x_{i,g} \,\frac{\partial \hat{a}_i}{\partial x_{i,g}} \right|
-  $$
+$$
+\text{GI}_g = \frac{1}{N} \sum_{i=1}^{N} \left| x_{i,g} \,\frac{\partial \hat{a}_i}{\partial x_{i,g}} \right|
+$$
 
-  where $\hat{a}_i$ is the predicted activation scalar.
+where $\hat{a}_i$ is the predicted activation scalar.
 
 ## Environment Setup
 1. Python 3.9+ recommended. Create a virtual environment:
