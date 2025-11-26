@@ -3,7 +3,9 @@
 English overview of the DRUG-seq multi-task Transformer pipeline for T cell activation profiling. The pipeline trains a transformer encoder on gene expression to jointly learn regression, classification, activation scoring, latent embeddings, and downstream analyses.
 
 ## Overview Graphic
-![Metabolite regulation of T cell activation](assets/metabolite_tcell_activation.png)
+<p align="center">
+  <img src="assets/metabolite_tcell_activation.png" alt="Metabolite regulation of T cell activation" width="420">
+</p>
 
 Metabolite-based DRUG-seq profiling feeds a multi-task Transformer that produces perturbation scores and latent embeddings; downstream in vivo colitis models validate top candidates.
 
@@ -66,35 +68,35 @@ $$
 $\mathbf{z}_i$ is the latent vector (implementation default latent dim = 32; conceptual description above mentions 16).
 
 ## Multi-task Heads and Losses
-- **Regression (3 scores)**  
+**Regression (3 scores)**
 
-  $$
-  \hat{\mathbf{y}}^{(3)}_i = \mathbf{W}_3 \mathbf{z}_i + \mathbf{b}_3
-  $$
+$$
+\hat{\mathbf{y}}^{(3)}_i = \mathbf{W}_3 \mathbf{z}_i + \mathbf{b}_3
+$$
 
-  MSE loss: $\mathcal{L}_\text{MSE} = \frac{1}{N}\sum_i \lVert \hat{\mathbf{y}}^{(3)}_i - \mathbf{y}^{(3)}_i\rVert_2^2$
+MSE loss: $\mathcal{L}_\text{MSE} = \frac{1}{N}\sum_i \lVert \hat{\mathbf{y}}^{(3)}_i - \mathbf{y}^{(3)}_i\rVert_2^2$
 
-- **Binary classification (Activated vs Resting)**  
+**Binary classification (Activated vs Resting)**
 
-  $$
-  \hat{y}^{(\text{cls})}_i = \mathbf{w}_{\text{cls}}^\top \mathbf{z}_i + b_{\text{cls}}
-  $$
+$$
+\hat{y}^{(\text{cls})}_i = \mathbf{w}_{\text{cls}}^\top \mathbf{z}_i + b_{\text{cls}}
+$$
 
-  BCE-with-logits: $\mathcal{L}_\text{BCE} = -\frac{1}{N}\sum_i \big[y^{(\text{cls})}_i \log\sigma(\hat{y}^{(\text{cls})}_i) + (1-y^{(\text{cls})}_i)\log(1-\sigma(\hat{y}^{(\text{cls})}_i))\big]$
+BCE-with-logits: $\mathcal{L}_\text{BCE} = -\frac{1}{N}\sum_i \big[y^{(\text{cls})}_i \log\sigma(\hat{y}^{(\text{cls})}_i) + (1-y^{(\text{cls})}_i)\log(1-\sigma(\hat{y}^{(\text{cls})}_i))\big]$
 
-- **Activation regularization (legacy score)**  
+**Activation regularization (legacy score)**
 
-  $$
-  \hat{y}^{(\text{act})}_i = \mathbf{w}_a^\top \mathbf{z}_i + b_a
-  $$
+$$
+\hat{y}^{(\text{act})}_i = \mathbf{w}_a^\top \mathbf{z}_i + b_a
+$$
 
-  $\mathcal{L}_\text{REG} = \frac{1}{N}\sum_i (\hat{y}^{(\text{act})}_i - y^{(\text{old})}_i)^2$
+$\mathcal{L}_\text{REG} = \frac{1}{N}\sum_i (\hat{y}^{(\text{act})}_i - y^{(\text{old})}_i)^2$
 
-- **Total loss**  
+**Total loss**
 
-  $$
-  \mathcal{L}_{\text{total}} = \mathcal{L}_\text{MSE} + \mathcal{L}_\text{BCE} + \lambda\,\mathcal{L}_\text{REG}, \quad \lambda=0.2
-  $$
+$$
+\mathcal{L}_{\text{total}} = \mathcal{L}_\text{MSE} + \mathcal{L}_\text{BCE} + \lambda\,\mathcal{L}_\text{REG}, \quad \lambda=0.2
+$$
 
 ## Training Setup
 - Optimizer AdamW, LR $1\times 10^{-3}$; batch size 32; epochs 50.
