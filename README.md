@@ -194,15 +194,32 @@ $$
 where $\hat{a}_i$ is the predicted activation scalar.
 
 ## Environment Setup
-1. Python 3.9+ recommended. Create a virtual environment:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   ```
-2. Install dependencies (for GPU, install the CUDA-matched PyTorch wheel first if needed):
-   ```bash
-   pip install -r requirements.txt
-   ```
+You may use either **Conda** or **Python venv** to create an isolated environment.
+
+---
+
+### **Option A — Recommended: Conda environment**
+
+```bash
+conda create -n drugseq-transformer python=3.9 -y
+conda activate drugseq-transformer
+
+# Install CUDA-matched PyTorch first if using GPU:
+# e.g. for CUDA 12.1:
+# conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
+
+pip install -r requirements.txt
+```
+
+### **Option B — Using Python venv**
+
+```bash
+python -m venv .venv
+source .venv/bin/activate   # (Linux/Mac)
+# .\.venv\Scripts\activate  # (Windows)
+
+pip install -r requirements.txt
+```
 
 ## Data Requirements
 Expected CSVs under `data/`:
