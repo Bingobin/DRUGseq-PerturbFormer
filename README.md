@@ -1,4 +1,4 @@
-# DRUGseq-PerturbTransformer (DPT)
+# DRUGseq-PerturbFormer (DPF)
 
 **Multi-task Transformer for metabolite-perturbation modeling in T cell activation**
 
@@ -7,7 +7,7 @@
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)
 
- DRUGseq-PerturbTransformer (DPT) is a multi-task Transformer that learns gene-expression
+ DRUGseq-PerturbFormer (DPT) is a multi-task Transformer that learns gene-expression
 responses under metabolite perturbations, producing:
   
 - 🔥 **Perturbation score** (activation enhancement / suppression)
