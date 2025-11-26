@@ -10,3 +10,9 @@
 /results.1122.e50
 /results.1123
 /results.cpm.z
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
