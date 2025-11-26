@@ -1,6 +1,19 @@
-# Tcell_DRUGseq_transformer
+# DRUGseq-PerturbTransformer (DPT)
 
-English overview of the DRUG-seq multi-task Transformer pipeline for T cell activation profiling. The pipeline trains a transformer encoder on gene expression to jointly learn regression, classification, activation scoring, latent embeddings, and downstream analyses.
+**Multi-task Transformer for metabolite-perturbation modeling in T cell activation**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)
+![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)
+
+ DRUGseq-PerturbTransformer (DPT) is a multi-task Transformer that learns gene-expression
+responses under metabolite perturbations, producing:
+  
+- 🔥 **Perturbation score** (activation enhancement / suppression)
+- 🧬 **Latent embedding** of sample states
+- 📊 **Metabolite ranking + signature extraction**
+- 🧠 **Gene-importance via Grad×Input**
 
 ## Overview Graphic
 <p align="center">
