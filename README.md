@@ -1,56 +1,55 @@
 # DRUGseq-PerturbFormer (DPF)
 
-**Multi-task Transformer for metabolite-perturbation modeling in T cell activation**
+**Multi-task Transformer for metabolite-driven perturbations in T cells**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)
 
- DRUGseq-PerturbFormer (DPT) is a multi-task Transformer that learns gene-expression
-responses under metabolite perturbations, producing:
-  
-- 🔥 **Perturbation score** (activation enhancement / suppression)
+DRUGseq-PerturbFormer (DPF) models transcriptomic responses of metabolite-treated T cells. A multi-task Transformer learns perturbation scores, latent embeddings, and gene-level attributions that quantify how compounds redirect T-cell states.
+
+DPF produces:
+- 🔥 **Perturbation score** (direction/strength of state shift)
 - 🧬 **Latent embedding** of sample states
 - 📊 **Metabolite ranking + signature extraction**
-- 🧠 **Gene-importance via Grad×Input**
+- ⭐️ **Gene-importance via Grad×Input**
 
 ## Overview Graphic
 <p align="center">
-  <img src="assets/metabolite_tcell_activation.png" alt="Metabolite regulation of T cell activation" width="420">
+  <img src="assets/metabolite_tcell_activation.png" alt="Metabolite perturbations in T cells" width="420">
 </p>
 
-Metabolite-based DRUG-seq profiling feeds a multi-task Transformer that produces perturbation scores and latent embeddings; downstream in vivo colitis models validate top candidates.
+DRUG-seq profiles feed a shared Transformer encoder. Multi-task heads return continuous phenotypic scores, a binary state logit, perturbation strength, and latent vectors; downstream analyses rank metabolites by their impact on T-cell transcriptional state.
 
 ## What It Does
 - Loads DRUG-seq expression matrix and metadata (`run_pipeline.py`, `src/data_loader.py`).
-- Multi-task Transformer (`src/model.py`) that embeds gene IDs/values, encodes with a Transformer, and predicts:
-  - Three continuous scores (`Tscore`, `CytoTRACE`, `Pseudotime`)
-  - Binary classification logit
-  - Scalar activation score
-  - Latent vector
-- Training loop with z-score option, best/last checkpoints, loss curves (`src/train.py`, `src/plot_loss.py`).
-- Exports per-well predictions, metabolite latent scores, latent distances to DMSO, and Gradient×Input gene importance (`src/export_results.py`, `src/scorer.py`, `src/latent.py`, `src/gene_importance.py`).
+- Encodes gene IDs/values with a Transformer (`src/model.py`) and predicts:
+  - Three continuous phenotypic scores (`Tscore`, `CytoTRACE`, `Pseudotime`)
+  - Binary state logit (resting vs perturbed/activated)
+  - Scalar legacy score (historical activation proxy)
+  - Latent vector per well
+- Training loop with optional z-score, checkpoints, and loss curves (`src/train.py`, `src/plot_loss.py`).
+- Exports per-well predictions, metabolite-level latent distances, and Gradient×Input gene importance (`src/export_results.py`, `src/scorer.py`, `src/latent.py`, `src/gene_importance.py`).
 
 ## Data Source and Preprocessing
-- Platform: DRUG-seq T cell RNA-seq expression matrix.
-- Each sample = one metabolite-treated well.
+- Platform: DRUG-seq RNA-seq on T cells; each sample is one metabolite-treated well.
 - Matrix: $\mathbf{X}\in\mathbb{R}^{N\times G}$ with $N=768$ wells and $G=2541$ VST-normalized, differentially perturbed genes.
 - Metadata: metabolite IDs $\text{meta}_i$, well IDs $\text{well}_i$.
-- Three continuous activation/differentiation scores:
+- Three continuous phenotypic scores:
 
 $$
 \mathbf{y}^{(3)}_i=[\text{Tscore}_i,\ \text{CytoTRACE}_i,\ \text{Pseudotime}_i]
 $$
 
-- Binary activation label: $y^{(\text{cls})}_i \in \{0,1\}$ (Resting vs Activated).
-- Legacy activation score used for regularization:
+- Binary label: $y^{(\text{cls})}_i \in \{0,1\}$ (Resting vs Altered state).
+- Legacy scalar (historical activation-style score) used for regularization:
 
 $$
 y^{(\text{old})}_i = \text{scale}(\text{Tscore}_i + \text{CytoTRACE}_i + \text{Pseudotime}_i)
 $$
 
-- Input expression already VST-normalized; no extra log/centering applied unless `--use_zscore`.
+- Input expression is already VST-normalized; optionally z-score with `--use_zscore`.
 
 ## Transformer Architecture
 **1) Gene-wise tokens**  
@@ -60,7 +59,7 @@ $$
 \mathbf{t}_{i,g} = \underbrace{\mathbf{W}_v\, x_{i,g}}_{\text{value projection}} + \underbrace{\mathbf{E}_g}_{\text{gene embedding}}
 $$
 
-Sequence length $G$ (genes), token dim $d$ (code defaults: $d_\text{model}=128$, $n_\text{head}=4$; latent dim $=32$).
+Sequence length $G$ (genes); token dim $d$ (defaults: $d_\text{model}=128$, $n_\text{head}=4$; latent dim $=32$).
 
 **2) Transformer encoder**
 
@@ -78,7 +77,7 @@ $$
 \mathbf{z}_i = \text{MLP}(\mathbf{h}_i)
 $$
 
-$\mathbf{z}_i$ is the latent vector (implementation default latent dim = 32; conceptual description above mentions 16).
+$\mathbf{z}_i$ is the latent vector (implementation default latent dim = 32).
 
 ## Multi-task Heads and Losses
 **Regression (3 scores)**
@@ -89,7 +88,7 @@ $$
 
 MSE loss: $\mathcal{L}_\text{MSE} = \frac{1}{N}\sum_i \lVert \hat{\mathbf{y}}^{(3)}_i - \mathbf{y}^{(3)}_i\rVert_2^2$
 
-**Binary classification (Activated vs Resting)**
+**Binary classification (Resting vs Altered)**
 
 $$
 \hat{y}^{(\text{cls})}_i = \mathbf{w}_{\text{cls}}^\top \mathbf{z}_i + b_{\text{cls}}
@@ -97,13 +96,16 @@ $$
 
 BCE-with-logits: $\mathcal{L}_\text{BCE} = -\frac{1}{N}\sum_i \big[y^{(\text{cls})}_i \log\sigma(\hat{y}^{(\text{cls})}_i) + (1-y^{(\text{cls})}_i)\log(1-\sigma(\hat{y}^{(\text{cls})}_i))\big]$
 
-**Activation regularization (legacy score)**
+**Legacy-score regularization**
 
 $$
-\hat{y}^{(\text{act})}_i = \mathbf{w}_a^\top \mathbf{z}_i + b_a
+\hat{y}^{(\text{legacy})}_i = \mathbf{w}_a^\top \mathbf{z}_i + b_a
 $$
 
-$\mathcal{L}_\text{REG} = \frac{1}{N}\sum_i (\hat{y}^{(\text{act})}_i - y^{(\text{old})}_i)^2$
+$$
+\mathcal{L}_\text{REG} = \frac{1}{N}\sum_i (\hat{y}^{(\text{legacy})}_i - y^{(\text{old})}_i)^2
+$$
+
 
 **Total loss**
 
@@ -130,13 +132,13 @@ d^{(\text{Euc})}_i = \lVert \mathbf{z}_i - \mu_{\text{DMSO}}\rVert_2, \qquad
 d^{(\text{cos})}_i = 1 - \frac{\mathbf{z}_i \cdot \mu_{\text{DMSO}}}{\lVert \mathbf{z}_i\rVert_2\,\lVert \mu_{\text{DMSO}}\rVert_2}
 $$
 
-Uses: rank metabolite effects, distinguish activation vs inhibition, correlate with phenotype scores, visualize latent structure (PCA/UMAP).
+Uses: rank metabolite effects, quantify state shifts away from DMSO baseline, correlate with phenotypic scores, and visualize latent structure (PCA/UMAP). Biologically, larger Euclidean distance suggests a broader or stronger transcriptional deviation from baseline, while higher cosine distance highlights changes in the direction of the transcriptomic program (even if overall magnitude is modest), helping separate “how much” a metabolite perturbs from “which pathways” it tilts.
 
 ## Gene Importance via Gradient × Input
 Per sample saliency:
 
 $$
-\text{saliency}_{i,g} = \left| \frac{\partial \hat{y}^{(\text{act})}_i}{\partial x_{i,g}} \cdot x_{i,g} \right|
+\text{saliency}_{i,g} = \left| \frac{\partial \hat{y}^{(\text{legacy})}_i}{\partial x_{i,g}} \cdot x_{i,g} \right|
 $$
 
 Global importance:
@@ -145,53 +147,10 @@ $$
 I_g = \frac{1}{N}\sum_i \text{saliency}_{i,g}
 $$
 
-Outputs `gene_importance_gradinput.csv`; highlights activation drivers, drug targets, and candidate markers.
+Outputs `gene_importance_gradinput.csv`; highlights genes most sensitive to metabolite-induced perturbations.
 
 ## Why This Framework Matters
-Supervised phenotype-driven embedding: latent space encodes drug-induced transcriptomic shifts tied directly to activation/differentiation phenotypes. Distances quantify perturbation strength; directions separate activation vs inhibition; embeddings and Grad×Input reveal key genes; multi-task heads deliver numeric scores and class boundaries while retaining prior knowledge via regularization.
-
-## Key Formulas
-**Z-score normalization (optional) for input genes**
-
-$$
-x_{i,g}^{(z)} = \frac{x_{i,g} - \mu_g}{\sigma_g + 10^{-8}}
-$$
-
-where $\mu_g, \sigma_g$ are computed on the training split.
-
-**Multi-task loss (per batch) combining regression, classification, and optional activation regularization**
-
-$$
-\mathcal{L} = \text{MSE}(y^{(3)}, \hat{y}^{(3)}) + \text{BCEWithLogits}(y^{(\text{cls})}, \hat{y}^{(\text{cls})}) + \lambda_{\text{reg}} \,\text{MSE}(y^{(\text{act-old})}, \hat{y}^{(\text{act})})
-$$
-
-with $\lambda_{\text{reg}} = 0.2$ when historical activation scores exist.
-
-**Latent norm score per sample**
-
-$$
-s_{\text{latent}} = \lVert z \rVert_2
-$$
-
-Aggregated by metabolite (mean/std/count) for ranking.
-
-**Latent distance to DMSO center**
-
-$$
-\mu_{\text{DMSO}} = \frac{1}{N_{\text{DMSO}}} \sum_{i \in \text{DMSO}} z_i
-$$
-
-$$
-d_{\text{euclid}}(i)=\lVert z_i - \mu_{\text{DMSO}}\rVert_2, \qquad d_{\text{cos}}(i)=1-\frac{z_i \cdot \mu_{\text{DMSO}}}{\lVert z_i\rVert_2\,\lVert \mu_{\text{DMSO}}\rVert_2}
-$$
-
-**Gradient×Input gene importance (global average over samples)**
-
-$$
-\text{GI}_g = \frac{1}{N} \sum_{i=1}^{N} \left| x_{i,g} \,\frac{\partial \hat{a}_i}{\partial x_{i,g}} \right|
-$$
-
-where $\hat{a}_i$ is the predicted activation scalar.
+Supervised, phenotype-aware embeddings let us quantify how metabolites redirect T-cell transcriptional states. Latent distances capture perturbation strength, directions separate shifts, and Grad×Input surfaces candidate genes and pathways—while keeping historical activation-style signals as a regularizer rather than the primary claim.
 
 ## Environment Setup
 You may use either **Conda** or **Python venv** to create an isolated environment.
@@ -228,7 +187,7 @@ Expected CSVs under `data/`:
 - `labels_cls.csv`: (N,) binary labels.
 - `meta_id.csv`: (N,) metabolite/condition IDs.
 - `well_id.csv`: (N,) well IDs.
-- Optional: `activation_score_old.csv` (historical activation), `cluster_id.csv` (clusters, used to subset DMSO).
+- Optional: `activation_score_old.csv` (historical score), `cluster_id.csv` (clusters, used to subset DMSO).
 
 ## Run Examples
 Train from scratch and export all outputs:
