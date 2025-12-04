@@ -6,9 +6,18 @@ from torch.utils.data import DataLoader, TensorDataset
 def compute_gene_importance(model,
                             expr_mat: np.ndarray,
                             device: str = "cpu",
-                            batch_size: int = 32):
+                            batch_size: int = 32,
+                            target: str = "logit",
+                            score_index: int = 0):
     """
-    Compute per-gene global importance using Gradient × Input w.r.t act_latent.
+    Compute per-gene global importance using Gradient × Input.
+
+    By default, attribution is taken w.r.t. the classification logit, which is
+    the most consistently trained head. You can switch targets via `target`:
+      - "logit": resting vs altered-state logit
+      - "act": legacy scalar head (only meaningful if `act_old` was used in training)
+      - "scores3": one of the three regression scores (pick with `score_index`)
+      - "latent": one latent dimension (pick with `score_index`)
 
     Parameters
     ----------
@@ -20,6 +29,10 @@ def compute_gene_importance(model,
         "cpu", "cuda", or "mps".
     batch_size : int
         Batch size for computing gradients.
+    target : str
+        Which output head to attribute. Defaults to "logit".
+    score_index : int
+        Index for "scores3" (0/1/2) or "latent" dimension.
 
     Returns
     -------
@@ -44,16 +57,32 @@ def compute_gene_importance(model,
         x.requires_grad_(True)
 
         # forward
-        _, _, act_scalar, _ = model(x)  # act_latent: (B,)
+        scores3, logits, act_scalar, latent = model(x)
+
+        # choose target tensor
+        if target == "logit":
+            tgt_tensor = logits  # (B,)
+        elif target == "act":
+            tgt_tensor = act_scalar  # (B,)
+        elif target == "scores3":
+            if score_index < 0 or score_index >= scores3.shape[1]:
+                raise ValueError(f"score_index {score_index} out of range for scores3 shape {scores3.shape}")
+            tgt_tensor = scores3[:, score_index]
+        elif target == "latent":
+            if score_index < 0 or score_index >= latent.shape[1]:
+                raise ValueError(f"score_index {score_index} out of range for latent shape {latent.shape}")
+            tgt_tensor = latent[:, score_index]
+        else:
+            raise ValueError(f"Unsupported target '{target}'. Use one of: logit, act, scores3, latent.")
 
         # scalar target = sum over batch
-        target = act_scalar.sum()
+        target_scalar = tgt_tensor.sum()
         model.zero_grad()
         if x.grad is not None:
             x.grad.zero_()
 
         # backward
-        target.backward()
+        target_scalar.backward()
 
         # grad wrt input x: same shape as x (B, G)
         grad_x = x.grad.detach()                # (B, G)
