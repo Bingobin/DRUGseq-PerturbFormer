@@ -3,6 +3,25 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 
+def _select_target(scores3, logits, act_scalar, latent, target: str, score_index: int):
+    """
+    Helper to pick the tensor to attribute.
+    """
+    if target == "logit":
+        return logits  # (B,)
+    if target == "act":
+        return act_scalar  # (B,)
+    if target == "scores3":
+        if score_index < 0 or score_index >= scores3.shape[1]:
+            raise ValueError(f"score_index {score_index} out of range for scores3 shape {scores3.shape}")
+        return scores3[:, score_index]
+    if target == "latent":
+        if score_index < 0 or score_index >= latent.shape[1]:
+            raise ValueError(f"score_index {score_index} out of range for latent shape {latent.shape}")
+        return latent[:, score_index]
+    raise ValueError(f"Unsupported target '{target}'. Use one of: logit, act, scores3, latent.")
+
+
 def compute_gene_importance(model,
                             expr_mat: np.ndarray,
                             device: str = "cpu",
@@ -60,20 +79,7 @@ def compute_gene_importance(model,
         scores3, logits, act_scalar, latent = model(x)
 
         # choose target tensor
-        if target == "logit":
-            tgt_tensor = logits  # (B,)
-        elif target == "act":
-            tgt_tensor = act_scalar  # (B,)
-        elif target == "scores3":
-            if score_index < 0 or score_index >= scores3.shape[1]:
-                raise ValueError(f"score_index {score_index} out of range for scores3 shape {scores3.shape}")
-            tgt_tensor = scores3[:, score_index]
-        elif target == "latent":
-            if score_index < 0 or score_index >= latent.shape[1]:
-                raise ValueError(f"score_index {score_index} out of range for latent shape {latent.shape}")
-            tgt_tensor = latent[:, score_index]
-        else:
-            raise ValueError(f"Unsupported target '{target}'. Use one of: logit, act, scores3, latent.")
+        tgt_tensor = _select_target(scores3, logits, act_scalar, latent, target, score_index)
 
         # scalar target = sum over batch
         target_scalar = tgt_tensor.sum()
@@ -119,3 +125,97 @@ def save_gene_importance(gene_names, importance, out_csv="gene_importance_gradin
     df = df.sort_values("GradInputImportance", ascending=False)
     df.to_csv(out_csv, index=False)
     print(f"[INFO] Gene importance saved to {out_csv}")
+
+
+def compute_gene_importance_ig(model,
+                               expr_mat: np.ndarray,
+                               device: str = "cpu",
+                               batch_size: int = 32,
+                               target: str = "logit",
+                               score_index: int = 0,
+                               baseline: np.ndarray = None,
+                               steps: int = 50):
+    """
+    Compute per-gene global importance using Integrated Gradients.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Trained GeneTransformerMultiTask model.
+    expr_mat : np.ndarray
+        Shape (N, G), same preprocessing as training (e.g. VST).
+    device : str
+        "cpu", "cuda", or "mps".
+    batch_size : int
+        Batch size for computing gradients.
+    target : str
+        Which output head to attribute ("logit"/"act"/"scores3"/"latent").
+    score_index : int
+        Index for "scores3" (0/1/2) or "latent" dimension.
+    baseline : np.ndarray
+        Baseline input of shape (G,). If None, uses zeros. For DMSO baseline,
+        pass the mean DMSO expression vector.
+    steps : int
+        Number of interpolation steps for integrated gradients.
+
+    Returns
+    -------
+    importance : np.ndarray
+        Shape (G,), global importance score for each gene.
+    """
+
+    model.eval()
+    model.to(device)
+
+    X = torch.tensor(expr_mat, dtype=torch.float32)
+    dataset = TensorDataset(X)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+    n_samples, n_genes = expr_mat.shape
+    importance_sum = np.zeros(n_genes, dtype=np.float64)
+    total_samples = 0
+
+    # prepare baseline
+    if baseline is None:
+        base_vec = torch.zeros(n_genes, device=device, dtype=torch.float32)
+    else:
+        base_vec = torch.tensor(baseline, dtype=torch.float32, device=device)
+        if base_vec.numel() != n_genes:
+            raise ValueError(f"baseline length {base_vec.numel()} does not match n_genes {n_genes}")
+
+    alphas = torch.linspace(0.0, 1.0, steps + 1, device=device)
+
+    for batch in loader:
+        (x,) = batch
+        x = x.to(device)
+        batch_size_actual = x.shape[0]
+        base = base_vec.unsqueeze(0).expand_as(x)
+        delta = x - base
+
+        grad_sum = torch.zeros_like(x)
+
+        for alpha in alphas[1:]:  # skip alpha=0 baseline
+            x_interp = base + alpha * delta
+            x_interp.requires_grad_(True)
+
+            scores3, logits, act_scalar, latent = model(x_interp)
+            tgt_tensor = _select_target(scores3, logits, act_scalar, latent, target, score_index)
+            target_scalar = tgt_tensor.sum()
+
+            model.zero_grad()
+            if x_interp.grad is not None:
+                x_interp.grad.zero_()
+
+            target_scalar.backward()
+            grad_sum += x_interp.grad.detach()
+
+        # average gradient along path
+        avg_grad = grad_sum / steps
+        ig = delta * avg_grad  # (B, G)
+
+        saliency_np = ig.abs().detach().cpu().numpy()  # (B, G)
+        importance_sum += saliency_np.sum(axis=0)
+        total_samples += batch_size_actual
+
+    importance = importance_sum / float(total_samples)
+    return importance

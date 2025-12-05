@@ -15,7 +15,7 @@ from src.plot_loss import plot_loss
 from src.export_results import export_per_well
 
 from src.model import GeneTransformerMultiTask
-from src.gene_importance import compute_gene_importance, save_gene_importance
+from src.gene_importance import compute_gene_importance, compute_gene_importance_ig, save_gene_importance
 from src.latent import compute_latent_scores
 
 
@@ -39,6 +39,23 @@ def parse_args():
                         help="Skip training and load existing model from --model_path")
     parser.add_argument("--gi_batch_size", type=int, default=32,
                         help="Batch size for Gradient×Input gene-importance (default: 32)")
+    parser.add_argument("--gi_method", type=str, default="gradinput",
+                        choices=["gradinput", "ig"],
+                        help="Method for gene importance: gradinput or integrated gradients (default: gradinput)")
+    parser.add_argument("--gi_target", type=str, default="logit",
+                        choices=["logit", "act", "scores3", "latent"],
+                        help="Output head to attribute for gene importance (default: logit)")
+    parser.add_argument("--gi_score_index", type=int, default=0,
+                        help="Index for scores3/latent when gi_target is scores3 or latent (default: 0)")
+    parser.add_argument("--gi_baseline", type=str, default="dmso_mean",
+                        choices=["zero", "dmso_mean"],
+                        help="Baseline for IG when gi_method=ig (default: zero)")
+    parser.add_argument("--gi_dmso_meta", type=str, default="DMSO",
+                        help="Metabolite ID used as DMSO baseline for IG (default: DMSO)")
+    parser.add_argument("--gi_dmso_cluster", type=str, default="C6",
+                        help="Optional cluster ID to further filter DMSO baseline (default: C6)")
+    parser.add_argument("--gi_steps", type=int, default=50,
+                        help="Number of interpolation steps for IG when gi_method=ig (default: 50)")
     parser.add_argument("--out_dir", type=str, default="results",
                         help="Output directory for all results (default: results)")
     return parser.parse_args()
@@ -187,8 +204,8 @@ def main():
     )
     print(f"[INFO] Time: {time.time() - t0:.2f} sec\n")
 
-    # 5. Gene importance (Gradient × Input)
-    print("[5/6] Computing gene importance (Gradient × Input)...")
+    # 5. Gene importance
+    print(f"[5/6] Computing gene importance ({args.gi_method})...")
     t0 = time.time()
 
     # Re-read expr CSV to get column names (we already read it earlier, but this is fine)
@@ -196,14 +213,43 @@ def main():
     df_expr = pd.read_csv(expr_path)
     gene_names = df_expr.columns.to_list()
 
-    from src.gene_importance import compute_gene_importance, save_gene_importance
+    # prepare baseline if needed
+    baseline_vec = None
+    if args.gi_method == "ig" and args.gi_baseline == "dmso_mean":
+        dmso_mask = (meta == args.gi_dmso_meta)
+        if cluster is not None and args.gi_dmso_cluster:
+            dmso_mask = dmso_mask & (cluster == args.gi_dmso_cluster)
+        if dmso_mask.any():
+            baseline_vec = expr[dmso_mask].mean(axis=0)
+            print(f"[INFO] IG baseline: {args.gi_dmso_meta} mean "
+                  f"over {dmso_mask.sum()} samples"
+                  + (f" in cluster {args.gi_dmso_cluster}" if args.gi_dmso_cluster else ""))
+        else:
+            print("[WARN] No baseline samples found for "
+                  f"meta={args.gi_dmso_meta}"
+                  + (f", cluster={args.gi_dmso_cluster}" if args.gi_dmso_cluster else "")
+                  + "; falling back to zero baseline for IG")
 
-    importance = compute_gene_importance(
-        model=model,
-        expr_mat=expr,
-        device=device,
-        batch_size=args.gi_batch_size
-    )
+    if args.gi_method == "ig":
+        importance = compute_gene_importance_ig(
+            model=model,
+            expr_mat=expr,
+            device=device,
+            batch_size=args.gi_batch_size,
+            target=args.gi_target,
+            score_index=args.gi_score_index,
+            baseline=baseline_vec,
+            steps=args.gi_steps
+        )
+    else:
+        importance = compute_gene_importance(
+            model=model,
+            expr_mat=expr,
+            device=device,
+            batch_size=args.gi_batch_size,
+            target=args.gi_target,
+            score_index=args.gi_score_index
+        )
 
     save_gene_importance(
         gene_names=gene_names,
@@ -211,7 +257,8 @@ def main():
         out_csv=f"{args.out_dir}/gene_importance_gradinput.csv"
     )
 
-    print(f"[INFO] Gene importance saved to gene_importance_gradinput.csv")
+    print(f"[INFO] Gene importance saved to gene_importance_gradinput.csv "
+          f"(method={args.gi_method}, target={args.gi_target}, idx={args.gi_score_index})")
     print(f"[INFO] Time: {time.time() - t0:.2f} sec\n")
 
     # 6. Compute latent distance scores
