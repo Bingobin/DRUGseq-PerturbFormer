@@ -17,7 +17,7 @@ DPF produces:
 
 ## Overview Graphic
 <p align="center">
-  <img src="assets/Metabolite_tcell_DPF.png" alt="Metabolite perturbations in T cells" width="420">
+  <img src="assets/Metabolite_tcell_DPF.png" alt="Metabolite perturbations in T cells" width="600">
 </p>
 
 DRUG-seq profiles feed a shared Transformer encoder. Multi-task heads return continuous phenotypic scores, a binary state logit, perturbation strength, and latent vectors; downstream analyses rank metabolites by their impact on T-cell transcriptional state.
