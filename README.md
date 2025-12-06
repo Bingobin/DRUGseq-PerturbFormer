@@ -13,7 +13,7 @@ DPF produces:
 - 🔥 **Perturbation score** (direction/strength of state shift)
 - 🧬 **Latent embedding** of sample states
 - 📊 **Metabolite ranking + signature extraction**
-- ⭐️ **Gene-importance via Grad×Input**
+- ⭐️ **Gene-importance via Grad×Input / Integrated Gradients**
 
 ## Overview Graphic
 <p align="center">
@@ -134,8 +134,8 @@ $$
 
 Uses: rank metabolite effects, quantify state shifts away from DMSO baseline, correlate with phenotypic scores, and visualize latent structure (PCA/UMAP). Biologically, larger Euclidean distance suggests a broader or stronger transcriptional deviation from baseline, while higher cosine distance highlights changes in the direction of the transcriptomic program (even if overall magnitude is modest), helping separate “how much” a metabolite perturbs from “which pathways” it tilts.
 
-## Gene Importance via Gradient × Input
-Per sample saliency:
+## Gene Importance (Grad×Input or Integrated Gradients)
+Per sample saliency (Grad×Input):
 
 $$
 \text{saliency}_{i,g} = \left| \frac{\partial \hat{y}^{(\text{legacy})}_i}{\partial x_{i,g}} \cdot x_{i,g} \right|
@@ -147,7 +147,7 @@ $$
 I_g = \frac{1}{N}\sum_i \text{saliency}_{i,g}
 $$
 
-Outputs `gene_importance_gradinput.csv`; highlights genes most sensitive to metabolite-induced perturbations.
+Integrated Gradients (IG) is also available with a configurable baseline (zero or DMSO mean) and target head (`logit` / `scores3` / `latent`). Outputs `gene_importance_gradinput.csv`; highlights genes most sensitive to metabolite-induced perturbations.
 
 ## Why This Framework Matters
 Supervised, phenotype-aware embeddings let us quantify how metabolites redirect T-cell transcriptional states. Latent distances capture perturbation strength, directions separate shifts, and Grad×Input surfaces candidate genes and pathways—while keeping historical activation-style signals as a regularizer rather than the primary claim.
@@ -202,11 +202,25 @@ Common flags:
 - `--skip_train`: skip training and load weights from `--model_path`.
 - `--use_zscore`: enable z-score normalization of gene expression.
 - `--seed`, `--num_threads`: control reproducibility and CPU threading.
+- Gene-importance options: `--gi_method {gradinput,ig}` (default gradinput), `--gi_baseline {zero,dmso_mean}`, `--gi_target {logit,act,scores3,latent}`, `--gi_score_index` (when using scores3/latent), `--gi_dmso_meta`, `--gi_dmso_cluster`, `--gi_steps`.
 
 Evaluate an existing model without training:
 ```bash
 python run_pipeline.py --skip_train --model_path results/model.pt
 ```
+
+Predict on new samples (CSV columns must match training order):
+```bash
+python predict.py \
+  --expr_csv new_expr.csv \
+  --meta_csv new_meta.csv \
+  --well_csv new_well.csv \
+  --model_path results/model.pt \
+  --out_csv results/predict_results.csv \
+  --dmso_meta DMSO \
+  --latent_index 0
+```
+Output includes predicted phenotypes, classification probability/label, per-dimension latent values, and Euclidean/cosine distances to the DMSO baseline.
 
 ## Outputs
 Written to `--out_dir`:
@@ -222,7 +236,9 @@ Written to `--out_dir`:
 - `src/model.py`: multi-task Transformer.
 - `src/train.py`, `src/dataset.py`: loaders and training loop.
 - `src/scorer.py`, `src/latent.py`: latent scoring and distances.
-- `src/gene_importance.py`: Gradient×Input importance.
+- `src/gene_importance.py`: Grad×Input / Integrated Gradients importance.
 - `src/export_results.py`: per-well prediction export.
 - `src/plot_loss.py`: loss visualization.
 - `src/data_loader.py`, `src/utils_seed.py`: IO and seeding.
+- `src/predict_utils.py`: shared utilities for inference.
+- `predict.py`: standalone inference CLI for new samples.
