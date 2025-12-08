@@ -3,6 +3,7 @@
 import argparse
 import os
 import torch
+import logging
 
 from src.predict_utils import (
     load_arrays,
@@ -30,6 +31,8 @@ def parse_args():
 def main():
     args = parse_args()
 
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+
     # device selection
     if args.device:
         device = args.device
@@ -41,15 +44,23 @@ def main():
         else:
             device = "cpu"
 
+    logging.info(f"Device: {device}")
+    logging.info(f"Loading expr from {args.expr_csv}")
     _, expr, meta, well = load_arrays(args.expr_csv, args.meta_csv, args.well_csv)
+    logging.info(f"Loaded matrix shape: {expr.shape}")
 
     # load model
     model = load_model(args.model_path, n_genes=expr.shape[1], device=device)
+    logging.info(f"Loaded model from {args.model_path}")
 
     # forward pass
     y3, logits, probs, classes, latents = run_inference(model, expr, device, args.batch_size)
+    logging.info("Inference done.")
 
     # distances
+    dmso_count = int((meta == args.dmso_meta).sum()) if meta is not None else 0
+    logging.info(f"DMSO baseline meta='{args.dmso_meta}' found in {dmso_count} samples"
+                 + (" (using their mean)" if dmso_count > 0 else " (fallback to global mean)"))
     euclid, cos_dist = compute_latent_distances(latents, meta, args.dmso_meta)
 
     # build output
@@ -68,7 +79,7 @@ def main():
 
     os.makedirs(os.path.dirname(args.out_csv), exist_ok=True) if os.path.dirname(args.out_csv) else None
     df_out.to_csv(args.out_csv, index=False)
-    print(f"[INFO] Saved predictions to {args.out_csv}")
+    logging.info(f"Saved predictions to {args.out_csv}")
 
 
 if __name__ == "__main__":
