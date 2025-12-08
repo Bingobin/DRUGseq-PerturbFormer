@@ -51,7 +51,7 @@ def main():
 
     # load model
     model = load_model(args.model_path, n_genes=expr.shape[1], device=device)
-    logging.info(f"Loaded model from {args.model_path}")
+    logging.info(f"Loaded model from {args.model_path} (latent_dim={model.latent_dim})")
 
     # forward pass
     y3, logits, probs, classes, latents = run_inference(model, expr, device, args.batch_size)

@@ -27,9 +27,17 @@ def load_arrays(expr_csv, meta_csv=None, well_csv=None):
     return df_expr.columns.to_list(), expr, meta, well
 
 
-def load_model(model_path, n_genes, device):
-    model = GeneTransformerMultiTask(n_genes=n_genes).to(device)
+def load_model(model_path, n_genes, device, latent_dim=None):
     state = torch.load(model_path, map_location=device)
+
+    # infer latent_dim from checkpoint if not provided
+    if latent_dim is None:
+        if "head_latent.weight" in state:
+            latent_dim = state["head_latent.weight"].shape[0]
+        else:
+            latent_dim = 32  # fallback to default
+
+    model = GeneTransformerMultiTask(n_genes=n_genes, latent_dim=latent_dim).to(device)
     model.load_state_dict(state)
     return model
 
