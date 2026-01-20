@@ -23,7 +23,7 @@ DPF produces:
 DRUG-seq profiles feed a shared Transformer encoder. Multi-task heads return continuous phenotypic scores, a binary state logit, perturbation strength, and latent vectors; downstream analyses rank metabolites by their impact on T-cell transcriptional state.
 
 ## What It Does
-- Loads DRUG-seq expression matrix and metadata (`run_pipeline.py`, `src/data_loader.py`).
+- Loads DRUG-seq expression matrix and metadata (`dpf_main.py`, `src/data_loader.py`).
 - Encodes gene IDs/values with a Transformer (`src/model.py`) and predicts:
   - Three continuous phenotypic scores (`Tscore`, `CytoTRACE`, `Pseudotime`)
   - Binary state logit (resting vs perturbed/activated)
@@ -192,7 +192,7 @@ Expected CSVs under `data/`:
 ## Run Examples
 Train from scratch and export all outputs:
 ```bash
-python run_pipeline.py \
+python dpf_main.py \
   --epochs 50 \
   --batch_size 32 \
   --data_dir data \
@@ -206,12 +206,12 @@ Common flags:
 
 Evaluate an existing model without training:
 ```bash
-python run_pipeline.py --skip_train --model_path results/model.pt
+python dpf_main.py --skip_train --model_path results/model.pt
 ```
 
 Predict on new samples (CSV columns must match training order):
 ```bash
-python predict.py \
+python dpf_predict.py \
   --expr_csv new_expr.csv \
   --meta_csv new_meta.csv \
   --well_csv new_well.csv \
@@ -232,7 +232,7 @@ Written to `--out_dir`:
 - If training: `loss_curve.png`, `history_loss_detailed.csv`, `gene_scaler.csv`
 
 ## Code Map
-- `run_pipeline.py`: orchestrates the full flow.
+- `dpf_main.py`: orchestrates the full flow.
 - `src/model.py`: multi-task Transformer.
 - `src/train.py`, `src/dataset.py`: loaders and training loop.
 - `src/scorer.py`, `src/latent.py`: latent scoring and distances.
@@ -241,4 +241,4 @@ Written to `--out_dir`:
 - `src/plot_loss.py`: loss visualization.
 - `src/data_loader.py`, `src/utils_seed.py`: IO and seeding.
 - `src/predict_utils.py`: shared utilities for inference.
-- `predict.py`: standalone inference CLI for new samples.
+- `dpf_predict.py`: standalone inference CLI for new samples.
